@@ -3,9 +3,15 @@ import java.net.*;
 import java.util.Random;
 
 public class Balanceador {
-    private static final int PORTA_LB = 9090;
-    // Portas dos servidores
-    private static final int[] PORTAS_SERVIDORES = {8001, 8002, 8003};
+    private static final int PORTA_LB = Config.getPort("LB.PORT");
+
+    private static final int num_servidores = Config.getNum("NUMBER.SERVERS");
+
+    private static final int s1 = Config.getPort("S1.PORT");
+    private static final int s2 = Config.getPort("S2.PORT");
+    private static final int s3 = Config.getPort("S3.PORT");
+
+    private static final int[] PORTAS_SERVIDORES = {s1, s2, s3};
 
     public static void main(String[] args) {
         System.out.println(">>> Balanceador rodando na porta " + PORTA_LB);
@@ -13,7 +19,6 @@ public class Balanceador {
         try (ServerSocket serverSocket = new ServerSocket(PORTA_LB)) {
             while (true) {
                 Socket clienteSocket = serverSocket.accept();
-                // Nova thread para não bloquear o aceite de conexões
                 new Thread(new LoadBalancerWorker(clienteSocket)).start();
             }
         } catch (IOException e) {
@@ -37,8 +42,7 @@ public class Balanceador {
                 String request = in.readLine();
 
                 if (request != null) {
-                    // Sorteia servidor aleatório (Chance igual para os 3)
-                    int indice = random.nextInt(3);
+                    int indice = random.nextInt(num_servidores);
                     int portaDestino = PORTAS_SERVIDORES[indice];
 
                     System.out.println("[LB] Redirecionando " + request + " para Servidor na porta " + portaDestino);
@@ -47,10 +51,8 @@ public class Balanceador {
                          PrintWriter outServidor = new PrintWriter(sServidor.getOutputStream(), true);
                          BufferedReader inServidor = new BufferedReader(new InputStreamReader(sServidor.getInputStream()))) {
                         
-                        // Envia como REQ (Requisição Inicial)
                         outServidor.println("REQ;" + request);
                         
-                        // Aguarda o servidor confirmar que recebeu e repassou ao coordenador
                         String respostaServidor = inServidor.readLine();
                         
                         if (request.startsWith("READ")) {

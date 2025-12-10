@@ -7,10 +7,12 @@ public class Servidor {
     private int id;
     private int porta;
 
+    private static final int thread_min_dormir = Config.getNum("OFFSET.THREAD.SLEEP");;
+    private static final int thread_intervalo_dormir = Config.getNum("RANGE.THREAD.SLEEP");;
+
     public Servidor(int id) {
         this.id = id;
-        // Define porta baseada no ID (8001, 8002, 8003)
-        this.porta = 8000 + id;
+        this.porta = Config.getPort("SERVER.BASE.PORT") + id;
     }
 
     public void iniciar() throws IOException {
@@ -19,7 +21,6 @@ public class Servidor {
 
         while (true) {
             Socket socket = serverSocket.accept();
-            // Requisito: Instanciar thread sob demanda para qualquer requisição
             new Thread(new Worker(socket, id)).start();
         }
     }
@@ -48,8 +49,7 @@ public class Servidor {
         @Override
         public void run() {
             try {
-                // Requisito: Thread dorme 100-200ms ANTES de processar
-                int sleepTime = 100 + random.nextInt(101);
+                int sleepTime = thread_min_dormir + random.nextInt(thread_intervalo_dormir);
                 Thread.sleep(sleepTime);
 
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -59,36 +59,35 @@ public class Servidor {
                 if (msg == null) return;
 
                 String[] partes = msg.split(";");
-                String tipo = partes[0]; // REQ ou COMMIT
+                String tipo = partes[0];
 
                 if (tipo.equals("REQ")) {
-                    // Chegou do Balanceador
+                    
                     String operacao = partes[1];
 
                     if (operacao.equals("READ")) {
-                        // --- REQUISITO 2: Leitura Local ---
+                        
                         long qtdLinhas = contarLinhasArquivo();
                         System.out.println("[S" + serverId + "] Leitura solicitada. Linhas: " + qtdLinhas);
-                        out.println(qtdLinhas); // Responde ao LB
+                        out.println(qtdLinhas);
                     } 
                     else if (operacao.equals("WRITE")) {
-                        // Fluxo de Escrita: Manda para Coordenador
+                        
                         String n1 = partes[2];
                         String n2 = partes[3];
                         
                         System.out.println("[S" + serverId + "] Repassando WRITE (" + n1 + "," + n2 + ") ao Coordenador.");
                         enviarParaCoordenador("WRITE;" + n1 + ";" + n2);
-                        out.println("RECEBIDO"); // Confirmação assíncrona p/ LB
+                        out.println("RECEBIDO");
                     }
 
                 } else if (tipo.equals("COMMIT")) {
-                    // Chegou do Coordenador (Apenas escritas vêm aqui)
-                    // Formato: COMMIT;WRITE;N1;N2
+                    
                     int n1 = Integer.parseInt(partes[2]);
                     int n2 = Integer.parseInt(partes[3]);
                     
                     int resultado = mdc(n1, n2);
-                    String linha = "MDC(" + n1 + "," + n2 + ") = " + resultado;
+                    String linha = String.format("O MDC entre %d e %d é %d", n1, n2, resultado);
                     
                     escreverArquivo(linha);
                     System.out.println("[S" + serverId + "] COMMIT REALIZADO: " + linha);
@@ -106,12 +105,12 @@ public class Servidor {
                 Path path = Paths.get("server" + serverId + ".txt");
                 return Files.lines(path).count();
             } catch (IOException e) {
-                return 0; // Se arquivo vazio ou erro
+                return 0;
             }
         }
 
         private void enviarParaCoordenador(String dados) {
-            try (Socket s = new Socket("localhost", 7000);
+            try (Socket s = new Socket("localhost", Config.getPort("COORD.PORT"));
                  PrintWriter pw = new PrintWriter(s.getOutputStream(), true)) {
                 pw.println(dados);
             } catch (IOException e) {
@@ -120,7 +119,7 @@ public class Servidor {
         }
 
         private synchronized void escreverArquivo(String linha) {
-            // Requisito: Servidor escreve apenas no seu arquivo local
+            
             try (FileWriter fw = new FileWriter("server" + serverId + ".txt", true);
                  PrintWriter pw = new PrintWriter(fw)) {
                 pw.println(linha);
