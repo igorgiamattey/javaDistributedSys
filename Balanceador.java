@@ -3,7 +3,7 @@ import java.net.*;
 import java.util.Random;
 
 public class Balanceador {
-    private static final int PORTA_LB = 8000;
+    private static final int PORTA_LB = 9090;
     // Portas dos servidores
     private static final int[] PORTAS_SERVIDORES = {8001, 8002, 8003};
 
@@ -34,7 +34,8 @@ public class Balanceador {
             try (BufferedReader in = new BufferedReader(new InputStreamReader(clienteSocket.getInputStream()));
                  PrintWriter outCliente = new PrintWriter(clienteSocket.getOutputStream(), true)) {
 
-                String request = in.readLine(); // "N1;N2"
+                String request = in.readLine();
+
                 if (request != null) {
                     // Sorteia servidor aleatório (Chance igual para os 3)
                     int indice = random.nextInt(3);
@@ -50,9 +51,17 @@ public class Balanceador {
                         outServidor.println("REQ;" + request);
                         
                         // Aguarda o servidor confirmar que recebeu e repassou ao coordenador
-                        inServidor.readLine(); 
+                        String respostaServidor = inServidor.readLine();
+                        
+                        if (request.startsWith("READ")) {
+                            outCliente.println("Total de Linhas no Servidor " + portaDestino + ": " + respostaServidor);
+                        }
+                        else {
+                            outCliente.println("PROCESSANDO_ESCRITA");
+                        }
+                    } catch (IOException e) {
+                        outCliente.println("ERRO: Servidor destino indisponível");
                     }
-                    outCliente.println("ENVIADO");
                 }
             } catch (IOException e) {
                 e.printStackTrace();

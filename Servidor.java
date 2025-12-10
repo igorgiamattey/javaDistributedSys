@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 import java.util.Random;
+import java.nio.file.*;
 
 public class Servidor {
     private int id;
@@ -61,36 +62,51 @@ public class Servidor {
                 String tipo = partes[0]; // REQ ou COMMIT
 
                 if (tipo.equals("REQ")) {
-                    // --- FLUXO 1: Chegou do Balanceador ---
-                    // Ação: Repassar para o Coordenador para garantir ordem global
-                    String n1 = partes[1];
-                    String n2 = partes[2];
-                    
-                    System.out.println("[S" + serverId + "] Recebido do LB (" + n1 + "," + n2 + "). Repassando ao Coordenador.");
-                    enviarParaCoordenador(n1 + ";" + n2);
-                    
-                    // Libera conexão com LB (O processamento real acontecerá assincronamente via Coordenador)
-                    out.println("RECEBIDO");
+                    // Chegou do Balanceador
+                    String operacao = partes[1];
+
+                    if (operacao.equals("READ")) {
+                        // --- REQUISITO 2: Leitura Local ---
+                        long qtdLinhas = contarLinhasArquivo();
+                        System.out.println("[S" + serverId + "] Leitura solicitada. Linhas: " + qtdLinhas);
+                        out.println(qtdLinhas); // Responde ao LB
+                    } 
+                    else if (operacao.equals("WRITE")) {
+                        // Fluxo de Escrita: Manda para Coordenador
+                        String n1 = partes[2];
+                        String n2 = partes[3];
+                        
+                        System.out.println("[S" + serverId + "] Repassando WRITE (" + n1 + "," + n2 + ") ao Coordenador.");
+                        enviarParaCoordenador("WRITE;" + n1 + ";" + n2);
+                        out.println("RECEBIDO"); // Confirmação assíncrona p/ LB
+                    }
 
                 } else if (tipo.equals("COMMIT")) {
-                    // --- FLUXO 2: Chegou do Coordenador ---
-                    // Ação: Calcular MDC e escrever no arquivo local
-                    int n1 = Integer.parseInt(partes[1]);
-                    int n2 = Integer.parseInt(partes[2]);
+                    // Chegou do Coordenador (Apenas escritas vêm aqui)
+                    // Formato: COMMIT;WRITE;N1;N2
+                    int n1 = Integer.parseInt(partes[2]);
+                    int n2 = Integer.parseInt(partes[3]);
                     
                     int resultado = mdc(n1, n2);
-                    String linha = "O MDC entre " + n1 + " e " + n2 + " é " + resultado;
+                    String linha = "MDC(" + n1 + "," + n2 + ") = " + resultado;
                     
                     escreverArquivo(linha);
-                    System.out.println("[S" + serverId + "] ESCREVENDO: " + linha);
-                    
-                    // Confirma para o Coordenador que escreveu
+                    System.out.println("[S" + serverId + "] COMMIT REALIZADO: " + linha);
                     out.println("OK");
                 }
                 
                 socket.close();
             } catch (Exception e) {
                 e.printStackTrace();
+            }
+        }
+
+        private long contarLinhasArquivo() {
+            try {
+                Path path = Paths.get("server" + serverId + ".txt");
+                return Files.lines(path).count();
+            } catch (IOException e) {
+                return 0; // Se arquivo vazio ou erro
             }
         }
 

@@ -10,19 +10,38 @@ public class Cliente {
 
         try (PrintWriter logger = new PrintWriter(new FileWriter("cliente_log.txt", true))) {
             while (true) {
-                // Gera dois números aleatórios entre 2 e 1.000.000
-                int n1 = 2 + random.nextInt(999999);
-                int n2 = 2 + random.nextInt(999999);
 
-                // Log local
-                String msg = n1 + ";" + n2;
-                logger.println("Enviado: " + msg);
+                boolean isEscrita =  random.nextBoolean();
+                String msgEnviar;
+                String logMsg;
+
+                if (isEscrita) {
+                    int n1 = 2 + random.nextInt(999999);
+                    int n2 = 2 + random.nextInt(999999);
+                    msgEnviar = "WRITE;" + n1 + ";" + n2;
+                    logMsg = "REQ Escrita (" + n1 + "," + n2 + ")";
+                }
+
+                else {
+                    msgEnviar = "READ";
+                    logMsg = "REQ Leitura";
+                }
+                
+                
+                System.out.println("Enviando: " + msgEnviar);
+                logger.println("Enviado: " + logMsg);
                 logger.flush();
 
                 // Envia para o Balanceador
-                try (Socket socket = new Socket("localhost", 8000);
-                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
-                    out.println(msg);
+                try (Socket socket = new Socket("localhost", 9090);
+                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                    
+                    out.println(msgEnviar);
+                    String resposta = in.readLine();
+                    System.out.println("Resposta do LB: " + resposta);
+                    logger.println("Resposta: " + resposta);
+                    
                 } catch (IOException e) {
                     System.err.println("Erro ao conectar ao Balanceador: " + e.getMessage());
                 }

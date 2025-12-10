@@ -47,7 +47,7 @@ public class Coordenador {
 
                     // 2. Envia comando de ESCRITA (COMMIT) para os 3 servidores sequencialmente
                     for (int porta : PORTAS_SERVIDORES) {
-                        enviarOrdemDeEscrita(porta, dados);
+                        enviarOrdemDeEscritaComRetentativa(porta, dados);
                     }
                     System.out.println("[Coordenador] Consistência atingida para: " + dados);
 
@@ -57,21 +57,30 @@ public class Coordenador {
             }
         }
 
-        private void enviarOrdemDeEscrita(int porta, String dados) {
-            try (Socket s = new Socket("localhost", porta);
-                 PrintWriter out = new PrintWriter(s.getOutputStream(), true);
-                 BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
-                
-                // Protocolo: "COMMIT;N1;N2"
-                out.println("COMMIT;" + dados);
-                
-                // Espera o ACK do servidor para garantir que ele escreveu antes de passar para o próximo
-                String resposta = in.readLine(); 
-                if (!"OK".equals(resposta)) {
-                    System.err.println("Erro ao escrever no servidor porta " + porta);
+        private void enviarOrdemDeEscritaComRetentativa(int porta, String dados) {
+            boolean sucesso = false;
+            
+            // Loop infinito até conseguir escrever neste servidor específico
+            while (!sucesso) {
+                try (Socket s = new Socket("localhost", porta);
+                     PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                     BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
+                    
+                    out.println("COMMIT;" + dados);
+                    
+                    String resposta = in.readLine(); 
+                    if ("OK".equals(resposta)) {
+                        sucesso = true; // Servidor confirmou, pode sair do loop
+                    }
+                } catch (IOException e) {
+                    System.err.println("[ALERTA CRÍTICO] Servidor na porta " + porta + " indisponível.");
+                    System.err.println("          >>> Pausando sistema até que ele retorne...");
+                    try {
+                        Thread.sleep(5000); // Tenta novamente a cada 5 segundos
+                    } catch (InterruptedException ex) {
+                        ex.printStackTrace();
+                    }
                 }
-            } catch (IOException e) {
-                System.err.println("Servidor na porta " + porta + " indisponível. Tentando pular...");
             }
         }
     }
